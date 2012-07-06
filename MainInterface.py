@@ -1,5 +1,6 @@
-import Tkinter, ComparisonInterface
+import Tkinter, tkMessageBox, ComparisonInterface, sys, contextlib
 from Tkinter import *
+from contextlib import closing
 from ComparisonInterface import ComparisonInterface
 from tkFileDialog import askopenfilename
 
@@ -25,10 +26,22 @@ class MainInterface(Frame):
         Frame.__init__(self, master)
         # set window title
         self.master.title("Civil3D Export Corrector")
+        # Tk variables
+        self.conv_elev_d = IntVar()
         # draw window elements
         self.grid(padx = 10, pady = 10)
         self.createWindowElements()
-            
+    
+    def report_callback_exception(self, exc, val, tb):
+        """ report exceptions """
+
+        self.bell()
+        tkMessageBox.showwarning(
+		    "Exception %s" % (exc),
+                    "[%s] %s" % (exc, val)
+        )
+        return
+        
     def createWindowElements(self):
         """ draw the window elements that we need """
             
@@ -37,11 +50,13 @@ class MainInterface(Frame):
         self.inFile = Entry(self)
         self.showFD = Button(self, text = "Browse", command = self.openFD)
         self.process_B = Button(self, text = "Process File", command = self.process_f)
+        self.conv_elev = Checkbutton(self, text = "Convert elevations from meters to feet?", variable = self.conv_elev_d)
         # draw the elements
         self.in_fieldLb.grid(row = 0, column = 0)
         self.inFile.grid(row = 0, column = 1)
         self.showFD.grid(row = 0, column = 2)
         self.process_B.grid(row = 0, column = 3)
+        self.conv_elev.grid(row = 1, column = 1)
     
     def openFD(self):
         """ open the Tkinter file dialog box and retrieve the chose value """
@@ -58,10 +73,16 @@ class MainInterface(Frame):
         self.inFile.grid_forget()
         self.showFD.grid_forget()
         self.process_B.grid_forget()
+        self.conv_elev.grid_forget()
         # actually do the beginnings of processing
-        f = open(self.filename, 'r')
-        data = f.read()
-        converted_d = self.process_data(data)
+        try:
+            with closing(open(self.filename, 'r')) as f:
+                data = f.read()
+                converted_d = self.process_data(data)
+        except (AttributeError) as e: 
+            self.report_callback_exception(e, e.message + "\n\n" + "Please pick a valid file.", None)
+            self.createWindowElements()
+            return
         c_i = ComparisonInterface(data, converted_d, self.filename, master = self)
         c_i.mainloop()
     
@@ -76,6 +97,7 @@ class MainInterface(Frame):
         data_conv = []
         # state variable
         reading = False
+        btype = ""
         # array for flipping values
         s = []
         # line count
@@ -84,6 +106,7 @@ class MainInterface(Frame):
             lc += 1
             if len(slice) == 0:
                 print 'blank slice @ %d' % (lc)
+                btype = ""
                 if len(s) > 0:
                     print 'dumping corrected data before slice @ %d' % (lc)
                     s.reverse()
@@ -97,24 +120,36 @@ class MainInterface(Frame):
                 reading = True
                 print 'Read ENDPOINT @ %d' % (lc)
                 slice = slice.split()
+                # this trims the last value off of the slice
                 del slice[-1]
                 d = slice[-1] + ','
                 slice[-1] = d
-                s.append(' '.join(slice))
+                slice = ' '.join(slice)
+                # this will do conversion of elevations if necessary
+                if self.conv_elev_d.get() == 1:
+                    slice = slice.split(", ")
+                    slice[2] = slice[2].strip(",")
+                    slice[2] = str(round(float(slice[2]) * 3.281, 2)) + ",,"
+                    slice = ", ".join(slice)
+                s.append(slice)
             elif slice.startswith("CENTERLINE:"):
                 reading = True
+                btype = "CENTERLINE"
                 print 'Found CENTERLINE block @ %d' % (lc)
                 data_conv.append(slice)
             elif slice.startswith("CUT LINE:"):
                 reading = True
+                btype = "CUTLINE"
                 print 'Found CUT LINE block @ %d' % (lc)
                 data_conv.append(slice)
             elif slice.startswith("SURFACE LINE:"):
                 reading = True
+                btype = "SURFACELINE"
                 print 'Found SURFACE LINE block @ %d' % (lc)
                 data_conv.append(slice)
             elif slice.startswith("BEGIN STREAM NETWORK:"):
                 print 'Found BEGIN STREAM NETWORK @ %d' % (lc)
+                btype = "BSN"
                 data_conv.append(slice)
                 pass
             elif slice == "END:" and reading is True:
@@ -131,6 +166,12 @@ class MainInterface(Frame):
                 q = [str(1 - eval(a)) for a in q]
                 slice = "BANK POSITIONS: %s, %s" % (q[0], q[1])
                 print 'New BANK POSITIONS @ %d calculated to be (%s, %s)' % (lc, q[0], q[1])
+                data_conv.append(slice)
+            elif reading is True and btype is "CENTERLINE":
+                if self.conv_elev_d.get() == 1:
+                    slice = slice.split(", ")
+                    slice[2] = str(round(float(slice[2]) * 3.281, 2))
+                    slice = ", ".join(slice)
                 data_conv.append(slice)
             elif reading is True:
                 s.append(slice)

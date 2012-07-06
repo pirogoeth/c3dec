@@ -1,1 +1,4 @@
 /*.pyc
+dist/*
+setup.py
+c3dec.zip

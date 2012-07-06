@@ -1,11 +1,25 @@
-import Tkinter, tkMessageBox
+import Tkinter, tkMessageBox, contextlib
+from contextlib import closing
 from Tkinter import *
 
 class ComparisonInterface(Frame):
     """ interface for the comparison dialog """
 	
     def __init__(self, source_data, conversion_data, filename, master = None):
-        """ initialise the comparison interface """
+        """ initialise the comparison interface
+        @author: Sean Johnson, maiome development <miyoko@maio.me>
+        @license:   This program is free software: you can redistribute it and/or modify
+                    it under the terms of the GNU General Public License as published by
+                    the Free Software Foundation, either version 3 of the License, or
+                    (at your option) any later version.
+
+                    This program is distributed in the hope that it will be useful,
+                    but WITHOUT ANY WARRANTY; without even the implied warranty of
+                    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+                    GNU General Public License for more details.
+
+                    You should have received a copy of the GNU General Public License
+                    along with this program.  If not, see <http://www.gnu.org/licenses/>. """
             
         Frame.__init__(self, master)
         # store data
@@ -48,14 +62,14 @@ class ComparisonInterface(Frame):
         self.cancel_B = Button(self, text = "Cancel", command = self.closeInterface)
         # scrollbar config
         self.scrollbar.config(command = self.updateTBPos)
-        self.scrollbar.activate('arrow1')
-        self.scrollbar.activate('arrow2')
-        self.scrollbar.activate('slider')
+        self.scrollbar.activate("arrow1")
+        self.scrollbar.activate("arrow2")
+        self.scrollbar.activate("slider")
         # add text to boxes
         self.source_t.insert(END, self.source)
         self.conv_t.insert(END, self.convert)
         # set grid positions
-        self.scrollbar.grid(row = 1, column = 2)
+        self.scrollbar.grid(row = 1, column = 2, columnspan = 1, rowspan = 1, sticky = E+S+N)
         self.source_bL.grid(row = 0, column = 0)
         self.source_t.grid(row = 1, column = 0)
         self.conv_bL.grid(row = 0, column = 1)
@@ -67,10 +81,14 @@ class ComparisonInterface(Frame):
         """ save the data. """
 
         try:
-            source = open(self.filename, 'r+')
-            source.truncate(0)
-            source.write(self.convert)
-            source.close()
+            # write the converted data
+            with closing(open(self.filename, 'w+')) as source:
+                source.write(self.convert)
+                source.close()
+            # write the original data to a backup file
+            with closing(open(self.filename + ".bak", "w+")) as backup:
+                backup.write(self.source)
+                backup.close()                    
         except IOError as (errno, strerr):
             tkMessageBox.showwarning(
                 title = "IOError",
@@ -79,8 +97,8 @@ class ComparisonInterface(Frame):
             self.closeInterface()
             return
         tkMessageBox.showinfo(
-            title = "hecras flipper",
-            message = "corrected file has been saved. [%s]" % (self.filename)
+            title = "c3dec",
+            message = "corrected file [%s] has been saved, backup file [%s] has been created." % (self.filename, self.filename + ".bak")
         )
         self.closeInterface()
 
